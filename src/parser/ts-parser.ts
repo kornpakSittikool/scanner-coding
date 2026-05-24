@@ -1,5 +1,6 @@
 import { Project, SyntaxKind, ClassDeclaration, Decorator, PropertyDeclaration, VariableDeclaration, SourceFile } from 'ts-morph';
 import * as path from 'path';
+import * as fs from 'fs';
 
 export interface ParsedSymbol {
   name: string;
@@ -42,6 +43,11 @@ export class CodeParser {
 
   parseFile(filepath: string, rootDir: string): ParsedFileResult {
     const relativePath = path.relative(rootDir, filepath).replace(/\\/g, '/');
+    
+    if (filepath.endsWith('.prisma')) {
+      return this.parsePrismaFile(filepath, relativePath);
+    }
+    
     let sourceFile = this.project.getSourceFile(filepath);
     if (sourceFile) {
       sourceFile.refreshFromFileSystemSync();
@@ -87,7 +93,7 @@ export class CodeParser {
       }
 
       // Generate class signature
-      const signature = cls.getText().split('{')[0].trim();
+      const signature = extractCleanSignature(cls.getText());
       const docstring = this.getJsDocText(cls);
 
       symbols.push({
@@ -119,7 +125,7 @@ export class CodeParser {
           kind: methodKind,
           startLine: method.getStartLineNumber(),
           endLine: method.getEndLineNumber(),
-          signature: method.getText().split('{')[0].trim(),
+          signature: extractCleanSignature(method.getText()),
           docstring: this.getJsDocText(method)
         });
       }
@@ -157,7 +163,7 @@ export class CodeParser {
         kind: 'interface',
         startLine: itf.getStartLineNumber(),
         endLine: itf.getEndLineNumber(),
-        signature: itf.getText().split('{')[0].trim(),
+        signature: extractCleanSignature(itf.getText()),
         docstring: this.getJsDocText(itf)
       });
     }
@@ -180,7 +186,7 @@ export class CodeParser {
         kind,
         startLine: fn.getStartLineNumber(),
         endLine: fn.getEndLineNumber(),
-        signature: fn.getText().split('{')[0].trim(),
+        signature: extractCleanSignature(fn.getText()),
         docstring: this.getJsDocText(fn)
       });
     }
@@ -515,4 +521,129 @@ export class CodeParser {
     }
     return null;
   }
+
+  // --- Helper: Prisma File Loader ---
+  private parsePrismaFile(filepath: string, relativePath: string): ParsedFileResult {
+    try {
+      const content = fs.readFileSync(filepath, 'utf8');
+      const dbSchemas = parsePrismaSchema(content, relativePath);
+      return { symbols: [], dbSchemas, relations: [] };
+    } catch (e) {
+      console.error(`[CodeParser] Error reading Prisma file: ${filepath}`, e);
+      return { symbols: [], dbSchemas: [], relations: [] };
+    }
+  }
+}
+
+// --- Global Helper: extractCleanSignature to fix curly braces in types ---
+export function extractCleanSignature(text: string): string {
+  let bracketDepth = 0;
+  
+  for (let i = 0; i < text.length; i++) {
+    const char = text[i];
+    
+    // Count brackets to ignore curly braces inside types
+    if (char === '(' || char === '<' || char === '[') {
+      bracketDepth++;
+    }
+    if (char === ')' || char === '>' || char === ']') {
+      bracketDepth--;
+    }
+    
+    // Split only at the outer level curly brace '{'
+    if (char === '{' && bracketDepth <= 0) {
+      return text.substring(0, i).trim();
+    }
+  }
+  
+  // Fallback
+  return text.split('{')[0].trim();
+}
+
+// --- Global Helper: parsePrismaSchema to parse plain text .prisma DSL schemas ---
+export function parsePrismaSchema(content: string, filepath: string): ParsedDbSchema[] {
+  const dbSchemas: ParsedDbSchema[] = [];
+  const lines = content.split('\n');
+  
+  let currentModelName: string | null = null;
+  let columns: any[] = [];
+  let relations: any[] = [];
+
+  for (let line of lines) {
+    line = line.trim();
+    if (!line || line.startsWith('//') || line.startsWith('#')) continue;
+    
+    // Match: model User {
+    const modelMatch = line.match(/^model\s+([a-zA-Z0-9_]+)\s*\{/);
+    if (modelMatch) {
+      currentModelName = modelMatch[1];
+      columns = [];
+      relations = [];
+      continue;
+    }
+    
+    if (currentModelName) {
+      if (line === '}') {
+        dbSchemas.push({
+          entityName: currentModelName,
+          dbType: 'prisma',
+          schemaJson: JSON.stringify({
+            tableName: currentModelName,
+            columns,
+            relations,
+            filepath
+          }, null, 2)
+        });
+        currentModelName = null;
+        continue;
+      }
+      
+      // Parse field lines inside model block
+      // Format: name type [attributes]
+      const fieldMatch = line.match(/^([a-zA-Z0-9_]+)\s+([a-zA-Z0-9_?\[\]]+)(.*)$/);
+      if (fieldMatch) {
+        const fieldName = fieldMatch[1];
+        let fieldType = fieldMatch[2];
+        const attributes = fieldMatch[3].trim();
+        
+        let isNullable = false;
+        if (fieldType.endsWith('?')) {
+          isNullable = true;
+          fieldType = fieldType.slice(0, -1);
+        }
+        
+        const isArray = fieldType.endsWith('[]');
+        const isRelation = isArray || attributes.includes('@relation') || 
+          (!['Int', 'String', 'Boolean', 'Float', 'DateTime', 'Json', 'Bytes', 'Decimal'].includes(fieldType) && !fieldType.endsWith('[]'));
+
+        if (isRelation) {
+          let targetEntity = fieldType;
+          if (targetEntity.endsWith('[]')) {
+            targetEntity = targetEntity.slice(0, -2);
+          }
+          
+          let relationType = isArray ? 'OneToMany' : 'ManyToOne';
+          relations.push({
+            fieldName,
+            relationType,
+            targetEntity,
+            type: fieldType
+          });
+        } else {
+          const isPrimary = attributes.includes('@id');
+          const isUnique = attributes.includes('@unique');
+          
+          columns.push({
+            name: fieldName,
+            type: fieldType,
+            isPrimary,
+            isNullable,
+            isUnique
+          });
+        }
+      }
+    }
+  }
+
+  return dbSchemas;
 }

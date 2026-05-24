@@ -112,7 +112,7 @@ export class CodeIndexer {
           walk(fullPath);
         } else if (stat.isFile()) {
           const ext = path.extname(file);
-          if (['.ts', '.tsx', '.js', '.jsx'].includes(ext)) {
+          if (['.ts', '.tsx', '.js', '.jsx', '.prisma'].includes(ext)) {
             this.indexFile(fullPath, rootDir);
           }
         }

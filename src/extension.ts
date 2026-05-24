@@ -151,7 +151,7 @@ export function activate(context: vscode.ExtensionContext) {
   context.subscriptions.push(
     vscode.workspace.onDidSaveTextDocument((doc) => {
       const ext = path.extname(doc.fileName);
-      if (['.ts', '.tsx', '.js', '.jsx'].includes(ext)) {
+      if (['.ts', '.tsx', '.js', '.jsx', '.prisma'].includes(ext)) {
         setTimeout(() => {
           sidebarProvider.refresh();
           if (dbInstance) {

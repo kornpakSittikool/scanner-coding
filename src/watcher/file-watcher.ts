@@ -13,7 +13,7 @@ export class FileWatcher {
   }
 
   start(excludeDirs: string[] = ['node_modules', 'dist', '.git', '.repo-scanner']): void {
-    const watchPattern = `${this.rootDir}/**/*.{ts,tsx,js,jsx}`;
+    const watchPattern = `${this.rootDir}/**/*.{ts,tsx,js,jsx,prisma}`;
     
     // Set up chokidar
     this.watcher = chokidar.watch(this.rootDir, {
@@ -31,10 +31,10 @@ export class FileWatcher {
         const shouldExclude = excludeDirs.some(dir => parts.includes(dir));
         if (shouldExclude) return true;
         
-        // Only watch TS/JS files, allow directories to be crawled
+        // Only watch TS/JS/Prisma files, allow directories to be crawled
         if (stats && stats.isFile()) {
           const ext = path.extname(filePath);
-          return !['.ts', '.tsx', '.js', '.jsx'].includes(ext);
+          return !['.ts', '.tsx', '.js', '.jsx', '.prisma'].includes(ext);
         }
         
         return false;
