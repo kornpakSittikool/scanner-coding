@@ -1,0 +1,70 @@
+{
+  "name": "repo-scanner",
+  "displayName": "RepoScanner",
+  "description": "Incremental AST codebase indexer and token-optimized context API for AI agents.",
+  "version": "1.0.0",
+  "publisher": "korapak",
+  "engines": {
+    "vscode": "^1.75.0"
+  },
+  "categories": [
+    "Other"
+  ],
+  "activationEvents": [
+    "*",
+    "onView:repo-scanner-view"
+  ],
+  "main": "./dist/extension.js",
+  "scripts": {
+    "vscode:prepublish": "npm run compile",
+    "compile": "tsc -b",
+    "watch": "tsc -b -w",
+    "build": "tsc -b",
+    "package": "npx @vscode/vsce package"
+  },
+  "contributes": {
+    "viewsContainers": {
+      "activitybar": [
+        {
+          "id": "repo-scanner-sidebar",
+          "title": "RepoScanner",
+          "icon": "resources/icon.svg"
+        }
+      ]
+    },
+    "views": {
+      "repo-scanner-sidebar": [
+        {
+          "id": "repo-scanner-view",
+          "name": "RepoScanner Control Panel"
+        }
+      ]
+    },
+    "commands": [
+      {
+        "command": "repo-scanner.generateBlueprint",
+        "title": "RepoScanner: Generate AI Codebase Blueprint",
+        "category": "RepoScanner"
+      },
+      {
+        "command": "repo-scanner.clearDatabase",
+        "title": "RepoScanner: Clear Scanner Database Cache",
+        "category": "RepoScanner"
+      }
+    ]
+  },
+  "dependencies": {
+    "chokidar": "^5.0.0",
+    "commander": "^14.0.3",
+    "dotenv": "^17.4.2",
+    "express": "^5.2.1",
+    "ts-morph": "^28.0.0"
+  },
+  "devDependencies": {
+    "@types/express": "^4.17.21",
+    "@types/node": "^20.11.24",
+    "@types/vscode": "^1.75.0",
+    "ts-node": "^10.9.2",
+    "typescript": "^5.3.3"
+  }
+}
